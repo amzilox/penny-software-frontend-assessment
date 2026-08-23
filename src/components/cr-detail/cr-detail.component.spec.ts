@@ -43,4 +43,12 @@ describe('CrDetailComponent', () => {
 		const changedRow: HTMLElement = fixture.nativeElement.querySelector('.cr-diff__row[data-kind="changed"]');
 		expect(changedRow.textContent).toContain('SKU-A');
 	});
+
+	// TIMELINE TEST
+	it('renders the approval timeline oldest-first', async () => {
+		const fixture = await render(users.approver, 'CR-1');
+		const entries: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll('.cr-timeline__entry .cr-timeline__action');
+		const order = Array.from(entries).map((e) => e.textContent?.trim());
+		expect(order).toEqual(['CREATE', 'SUBMIT', 'SEND_FOR_APPROVAL']);
+	});
 });
