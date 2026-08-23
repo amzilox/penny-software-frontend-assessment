@@ -31,4 +31,16 @@ describe('CrDetailComponent', () => {
 		const approveBtn: HTMLButtonElement = fixture.nativeElement.querySelector('.cr-actions__approve');
 		expect(approveBtn.disabled).toBe(true);
 	});
+
+	// DIFF TOTALS & DELTA TEST
+	it('renders totals, delta, and the correct diff kind per row', async () => {
+		const fixture = await render(users.approver, 'CR-1');
+		const totals = fixture.nativeElement.querySelector('.cr-detail__totals').textContent;
+		expect(totals).toContain('USD 8,000.00');
+		expect(totals).toContain('USD 8,500.00');
+		expect(totals).toContain('USD 500.00');
+
+		const changedRow: HTMLElement = fixture.nativeElement.querySelector('.cr-diff__row[data-kind="changed"]');
+		expect(changedRow.textContent).toContain('SKU-A');
+	});
 });
