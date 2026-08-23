@@ -94,4 +94,35 @@ describe('CrDetailComponent', () => {
 		expect(fixture.nativeElement.querySelector('.cr-status').textContent).toContain('PENDING_APPROVAL');
 		expect(approveBtn.disabled).toBe(false); // submitting flag reset, not stuck
 	});
+
+	// REJECT ACTION TESTS
+	it('disables Reject until a reason is entered', async () => {
+		const fixture = await render(users.approver, 'CR-1');
+		const rejectBtn: HTMLButtonElement = fixture.nativeElement.querySelector('.cr-actions__reject-btn');
+		expect(rejectBtn.disabled).toBe(true);
+
+		const textarea: HTMLTextAreaElement = fixture.nativeElement.querySelector('.cr-actions__reason');
+		textarea.value = 'Budget exceeded';
+		textarea.dispatchEvent(new Event('input'));
+		fixture.detectChanges();
+
+		expect(rejectBtn.disabled).toBe(false);
+	});
+
+	it('rejects a pending CR with a reason and updates the rendered status', async () => {
+		const fixture = await render(users.approver, 'CR-1');
+		const textarea: HTMLTextAreaElement = fixture.nativeElement.querySelector('.cr-actions__reason');
+		textarea.value = 'Budget exceeded';
+		textarea.dispatchEvent(new Event('input'));
+		fixture.detectChanges();
+
+		const rejectBtn: HTMLButtonElement = fixture.nativeElement.querySelector('.cr-actions__reject-btn');
+		rejectBtn.click();
+		fixture.detectChanges();
+		await flush();
+		fixture.detectChanges();
+
+		expect(fixture.nativeElement.querySelector('.cr-status').textContent).toContain('REJECTED');
+		expect(fixture.nativeElement.querySelector('.cr-actions__reject')).toBeNull();
+	});
 });
