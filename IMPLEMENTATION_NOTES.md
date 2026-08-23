@@ -2,54 +2,56 @@
 
 ## 1. What I changed
 
-- **Task 1 (starting bugs):**
-  - `diff.util.ts` — `computeDiff()` only compared `unitPrice`, so a quantity-only change (e.g. CR-1's SKU-A 10→11 units) was misreported as `unchanged`. Now also compares `quantity`.
-  - `cr-detail.component.ts` — `canApprove` only checked CR status, so a read-only viewer (`cr_r_o`) saw an enabled Approve button. Now AND's the status check with `canApprovePolicy(user)` from `common/permissions.ts`.
-- **Task 2 (list):** implemented `visibleRows` to filter `state.data` by `statusFilter` (`'ALL'` passes everything through).
-- **Task 3 (detail):**
-  - `timeline` getter now sorts a **copy** of `audit` ascending by `at` (fixtures store it newest-first).
-  - `canReject` gated the same way as `canApprove` (status + policy) — see Assumptions.
-  - Added `Validators.required` to `rejectControl`.
-  - Implemented `approve()`/`reject()`: guard on `can*`/`submitting`/form validity, call the mock API with `new Date().toISOString()`, replace `state.data` with the server's response on success, set `actionError` on failure, always reset `submitting` in `finally`.
+- Fixed the diff bug: `computeDiff()` in `diff.util.ts` only checked `unitPrice` to decide if a line item changed, so a quantity-only change (CR-1's SKU-A, 10 → 11 units) was showing up as "unchanged". Added a `quantity` check too.
+- Fixed the permission bug: `canApprove` in `cr-detail.component.ts` only checked the CR's status, not the user's permissions, so a read-only viewer still got an enabled Approve button. Now it also checks `canApprovePolicy(user)`.
+- List filter: implemented `visibleRows` so the table narrows by the selected status (was a TODO).
+- Detail page:
+  - Timeline now actually sorts by date (oldest first). The fixtures store it newest-first, and it was just being rendered as-is before.
+  - `canReject` now uses the same status + permission check as `canApprove`.
+  - Reject reason is now required (`Validators.required` on the form control).
+  - Wrote `approve()` and `reject()` — they call the mock API, disable the buttons while the call is in flight, update the CR on success, and show an error without breaking anything on failure.
 
 ## 2. Component & state model
 
-- **List (`CrListComponent`):** single `state: ViewState<CrSummary[]>` drives loading/loaded/empty/error rendering directly in the template via `*ngIf` on `state.status`. `statusFilter` is a separate field; `visibleRows` is a derived getter over `state.data`, recomputed each change-detection pass (no memoization needed at this scale).
-- **Detail (`CrDetailComponent`):** same `ViewState<CrDetail>` pattern for load state. `diff`, `timeline`, `canApprove`, `canReject` are all getters derived from `state.data` — no duplicated/cached fields to keep in sync. `submitting` + `actionError` are the only two extra fields, scoped to the approve/reject flow.
-- Data flow: `SessionService.user` (constructor-injected) + `CrApiService` (Promise-based mock) feed both components' `load()`; actions call the same service and re-assign `state` wholesale on success/failure, never mutate in place.
+Both list and detail keep one `state: ViewState<T>` field (`idle/loading/loaded/empty/error` + the data). The template just switches on `state.status`. Everything else (filtered rows, the diff, the timeline, whether actions are allowed) is a plain getter computed from that state — nothing extra to keep in sync by hand.
+
+Detail also has `submitting` and `actionError`, only used around the approve/reject calls.
+
+Data comes from `CrApiService` (mock, returns Promises) and `SessionService.user`, both injected through the constructor.
 
 ## 3. Invariants I keep
 
-| Invariant | How / where |
-|---|---|
-| Rendered rows always match `statusFilter` | `visibleRows` getter filters `state.data`, template only reads `visibleRows` |
-| Timeline always oldest→newest | `timeline` getter sorts a copy of `audit` by `at`, never mutates the source array |
-| Approve/Reject only enabled for `PENDING_APPROVAL` + permitted user | `canApprove`/`canReject` AND status with `canApprovePolicy(user)` |
-| No double-submit / no stuck "submitting" UI | `submitting` flag set before the API call, reset in `finally`; both action methods also short-circuit if already `submitting` |
-| Reject requires a non-empty reason | `Validators.required` on `rejectControl`, button `[disabled]` includes `rejectControl.invalid`, `reject()` also re-checks `.invalid` defensively |
-| Failed actions never corrupt state | `state.data` is only reassigned on a **successful** API response; failures only set `actionError` |
+| Invariant                                                                                             | Where                                                                     |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Table only shows rows matching the status filter                                                      | `visibleRows` getter                                                      |
+| Timeline is always oldest → newest                                                                    | `timeline` getter sorts a copy of `audit`                                 |
+| Approve/Reject only enabled when status is `PENDING_APPROVAL` **and** the user has approve permission | `canApprove` / `canReject`                                                |
+| Can't double-submit or get stuck on a spinner                                                         | `submitting` flag, reset in a `finally`                                   |
+| Reject needs a non-empty reason                                                                       | `Validators.required` + button disabled while invalid                     |
+| A failed approve/reject never silently changes the CR's status                                        | `state.data` only gets replaced on success, errors just set `actionError` |
 
 ## 4. Testing strategy
 
-- Component/DOM tests via `TestBed` + `fixture.detectChanges()` (mount → flush the mock API's timer → re-render), matching the pattern in the provided specs.
-- Added coverage for: status filter narrowing, list error state (driving `CrApiService.failNext` directly), diff totals/delta + rendered diff kind, chronological timeline order, Reject hidden for a read-only viewer, Approve happy path, Approve failure path (asserts no stale status/no stuck button), Reject validation (disabled until a reason is typed), Reject happy path.
-- Deliberately skipped: a dedicated slow-network/double-click test beyond the failure-path test — the `submitting` guard is exercised implicitly (button stays disabled for the duration of every `await` in the flows above), but a test that clicks twice mid-flight would add coverage with diminishing return given the time budget.
+Used the same `TestBed` + `detectChanges()` / flush / `detectChanges()` pattern already in the provided specs. Added tests for: the status filter, the list's error state, diff totals + a specific "changed" row, timeline order, Reject being hidden for a viewer, approve working, approve failing (and not leaving the UI stuck), reject being blocked without a reason, and reject working end to end.
+
+Didn't write a test for clicking Approve twice really fast — the guard is in place and gets exercised indirectly by the other tests, but a dedicated double-click test felt like lower priority given the time I had.
 
 ## 5. Assumptions
 
-- The brief only defines `cr_a_*` (approve) policies, no separate "reject" scope. I gated `canReject` on the same `canApprovePolicy(user)` as `canApprove`, treating reject as the other half of the same approval decision (an approver can do either; a viewer can do neither).
-- Rejection reason validation is `Validators.required` only (non-empty) — no minimum length, since the brief just says "a reason is required."
+- There's no separate "reject" permission in the policy convention (only `cr_a_*` for approve), so I made Reject require the same permission as Approve — figured whoever can approve a CR can also reject it.
+- Reason validation is just "not empty", nothing fancier like a minimum length.
 
 ## 6. Where I used AI
 
-Used GitHub Copilot (Claude) throughout, primarily as a **pairing/mentor tool rather than an autocomplete**, given I come from a React/Next.js background with no prior Angular experience:
-- Explained Angular-specific concepts against my React knowledge before I wrote anything myself — standalone components vs. NgModules, constructor-based dependency injection vs. hooks/context, template syntax (`*ngIf`/`*ngFor`/property & event bindings) vs. JSX, getters as derived state (no memoization) vs. `useMemo`, Reactive Forms (`FormControl`/`Validators`) vs. controlled inputs, and why this repo uses plain Promises instead of RxJS.
-- For each bug/task, it identified the root cause and proposed the exact fix conceptually; I typed every line myself so I could reason about and explain it live.
-- Helped me design and write the Jest/TestBed test scripts for Milestone 6 (list filter/error state, diff totals, timeline order, permission gating, approve/reject happy and failure paths, reject validation) — I understand and can walk through each assertion, but the test-authoring itself leaned on AI more than the component code did.
+I come from React/Next.js, no prior Angular experience, so I used Copilot mostly as a mentor rather than to generate code for me:
+
+- Had it explain the Angular concepts I needed against what I already knew from React — standalone components, constructor-based DI vs hooks, the template syntax, getters as derived state, reactive forms, and why this repo doesn't need RxJS.
+- The test files in Milestone 6 are where I leaned on it the most — it helped me figure out how to drive `failNext`/click events/form inputs in the TestBed setup, since I hadn't written Angular tests before.
 
 ## 7. What I'd improve with more time
 
-- A dedicated test for the double-click/slow-network scenario (click Approve twice in a row while a request is in flight, assert only one API call fires).
-- Extract the repeated `submitting`/`actionError`/try-catch-finally shape in `approve()`/`reject()` into a small shared helper if a third action were ever added.
-- Add an explicit loading indicator on the action buttons themselves (currently just `disabled`, no spinner/text change) for clearer UX during slow calls.
-
+- The UI is very plain right now — with more time I'd add some actual styling (spacing, colors, maybe a card layout for the CR detail) instead of the bare HTML it has now.
+- A loading spinner on the Approve/Reject buttons instead of just disabling them, so it's clearer something is happening while the request is in flight.
+- A toast/snackbar for success and error messages instead of the plain error text in the actions section — feels more like a real app.
+- A real test for double-clicking Approve during a slow call, just didn't get to it.
+- Probably some duplication between `approve()` and `reject()` I could clean up if I had more time to look at it.
