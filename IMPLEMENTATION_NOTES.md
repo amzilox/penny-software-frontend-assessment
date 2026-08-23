@@ -10,6 +10,8 @@
   - `canReject` now uses the same status + permission check as `canApprove`.
   - Reject reason is now required (`Validators.required` on the form control).
   - Wrote `approve()` and `reject()` — they call the mock API, disable the buttons while the call is in flight, update the CR on success, and show an error without breaking anything on failure.
+- Bonus fix, not part of the listed tasks: clicking a different row in the list wasn't updating the detail pane. `CrDetailComponent` only loaded the CR in `ngOnInit`, so once the first CR was in, changing the `id` input did nothing. Added `ngOnChanges` to reload when `id` changes. Found this just clicking around the app, figured it was worth fixing since it's a pretty visible bug even though it wasn't called out in the brief.
+- Another bonus fix: approving or rejecting a CR updated the detail pane but the list still showed the old status, since they're two separate components with their own state. Added a `changed` output on `CrDetailComponent`, emitted on a successful approve/reject, and wired it up in `app.component.html` to re-fetch both panes.
 
 ## 2. Component & state model
 

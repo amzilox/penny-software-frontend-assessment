@@ -1,4 +1,4 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CrApiService } from '../../api/cr-api.service';
@@ -20,7 +20,8 @@ import { canApprovePolicy } from '../../common/permissions';
 	imports: [CommonModule, ReactiveFormsModule],
 	templateUrl: './cr-detail.component.html',
 })
-export class CrDetailComponent implements OnInit {
+export class CrDetailComponent implements OnInit, OnChanges {
+	@Output() changed = new EventEmitter<void>();
 	@Input() id!: string;
 
 	state: ViewState<CrDetail> = idle();
@@ -33,6 +34,12 @@ export class CrDetailComponent implements OnInit {
 
 	ngOnInit(): void {
 		void this.load();
+	}
+
+	ngOnChanges(changes: SimpleChanges): void {
+		if (changes['id'] && !changes['id'].firstChange) {
+			void this.load();
+		}
 	}
 
 	async load(): Promise<void> {
@@ -84,6 +91,7 @@ export class CrDetailComponent implements OnInit {
 		try {
 			const updated = await this.api.approve(this.session.user, this.id, new Date().toISOString());
 			this.state = { status: 'loaded', data: updated };
+			this.changed.emit();
 		} catch (err) {
 			this.actionError = (err as Error).message;
 		} finally {
@@ -102,6 +110,7 @@ export class CrDetailComponent implements OnInit {
 		try {
 			const updated = await this.api.reject(this.session.user, this.id, new Date().toISOString(), this.rejectControl.value);
 			this.state = { status: 'loaded', data: updated };
+			this.changed.emit();
 		} catch (err) {
 			this.actionError = (err as Error).message;
 		} finally {
