@@ -51,4 +51,10 @@ describe('CrDetailComponent', () => {
 		const order = Array.from(entries).map((e) => e.textContent?.trim());
 		expect(order).toEqual(['CREATE', 'SUBMIT', 'SEND_FOR_APPROVAL']);
 	});
+
+	// REJECT CONTROL TEST
+	it('hides the Reject control entirely for a read-only viewer', async () => {
+		const fixture = await render(users.viewer, 'CR-1');
+		expect(fixture.nativeElement.querySelector('.cr-actions__reject')).toBeNull();
+	});
 });
