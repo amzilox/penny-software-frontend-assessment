@@ -2,3 +2,4 @@ node_modules/
 dist/
 *.log
 .angular/
+ANGULAR_QUICKSTART.md
