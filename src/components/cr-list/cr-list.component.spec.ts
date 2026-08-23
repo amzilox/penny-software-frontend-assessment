@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CrListComponent } from './cr-list.component';
 import { SessionService } from '../../session/session.service';
+import { CrApiService } from '../../api/cr-api.service';
 import { users } from '../../api/fixtures';
 import { ReqUser } from '../../models/cr.models';
 
@@ -29,5 +30,31 @@ describe('CrListComponent', () => {
 		const fixture = await render({ id: 'x', orgCode: 'org-empty', policies: ['cr_r_o'] });
 		expect(fixture.nativeElement.querySelector('.cr-list__empty')).not.toBeNull();
 		expect(fixture.nativeElement.querySelector('.cr-list__table')).toBeNull();
+	});
+
+	// FILTER TESTS
+	it('narrows rows by the selected status filter', async () => {
+		const fixture = await render(users.approver);
+		fixture.componentInstance.onFilterChange('PENDING_APPROVAL');
+		fixture.detectChanges();
+		const rows: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll('.cr-list__row');
+		expect(rows.length).toBe(1);
+		expect(rows[0].textContent).toContain('CR-1');
+	});
+
+	// ERROR STATE TEST
+	it('shows the error state when the load fails', async () => {
+		TestBed.configureTestingModule({
+			imports: [CrListComponent],
+			providers: [{ provide: SessionService, useValue: { user: users.approver } }],
+		});
+		await TestBed.compileComponents();
+		TestBed.inject(CrApiService).failNext = true;
+		const fixture = TestBed.createComponent(CrListComponent);
+		fixture.detectChanges(); // ngOnInit -> load()
+		await flush();
+		fixture.detectChanges();
+		expect(fixture.nativeElement.querySelector('.cr-list__error')).not.toBeNull();
+		expect(fixture.nativeElement.querySelector('.cr-list__error').textContent).toContain('Network error');
 	});
 });
