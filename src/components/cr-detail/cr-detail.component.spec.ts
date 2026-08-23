@@ -3,6 +3,7 @@ import { CrDetailComponent } from './cr-detail.component';
 import { SessionService } from '../../session/session.service';
 import { users } from '../../api/fixtures';
 import { ReqUser } from '../../models/cr.models';
+import { CrApiService } from '../../api/cr-api.service';
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -56,5 +57,41 @@ describe('CrDetailComponent', () => {
 	it('hides the Reject control entirely for a read-only viewer', async () => {
 		const fixture = await render(users.viewer, 'CR-1');
 		expect(fixture.nativeElement.querySelector('.cr-actions__reject')).toBeNull();
+	});
+
+	// APPROVE ACTION TESTS
+	it('approves a pending CR and updates the rendered status', async () => {
+		const fixture = await render(users.approver, 'CR-1');
+		const approveBtn: HTMLButtonElement = fixture.nativeElement.querySelector('.cr-actions__approve');
+		approveBtn.click();
+		fixture.detectChanges();
+		await flush();
+		fixture.detectChanges();
+		expect(fixture.nativeElement.querySelector('.cr-status').textContent).toContain('APPROVED');
+		expect((fixture.nativeElement.querySelector('.cr-actions__approve') as HTMLButtonElement).disabled).toBe(true);
+	});
+
+	it('shows an error and leaves status unchanged when approve fails', async () => {
+		TestBed.configureTestingModule({
+			imports: [CrDetailComponent],
+			providers: [{ provide: SessionService, useValue: { user: users.approver } }],
+		});
+		await TestBed.compileComponents();
+		const fixture = TestBed.createComponent(CrDetailComponent);
+		fixture.componentInstance.id = 'CR-1';
+		fixture.detectChanges();
+		await flush();
+		fixture.detectChanges();
+
+		TestBed.inject(CrApiService).failNext = true;
+		const approveBtn: HTMLButtonElement = fixture.nativeElement.querySelector('.cr-actions__approve');
+		approveBtn.click();
+		fixture.detectChanges();
+		await flush();
+		fixture.detectChanges();
+
+		expect(fixture.nativeElement.querySelector('.cr-actions__error').textContent).toContain('Network error');
+		expect(fixture.nativeElement.querySelector('.cr-status').textContent).toContain('PENDING_APPROVAL');
+		expect(approveBtn.disabled).toBe(false); // submitting flag reset, not stuck
 	});
 });
